@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 pub struct GlobalState {
-    sender: Sender<Box<dyn Report>>,
+    sender: Option<Sender<Box<dyn Report>>>,
     receiver: Arc<Mutex<Receiver<Box<dyn Report>>>>,
     typeid_to_writer: Arc<Mutex<HashMap<TypeId, Writer<File>>>>,
     consumer_thread: Option<JoinHandle<()>>,
@@ -20,7 +20,7 @@ impl GlobalState {
         let (sender, receiver): (Sender<Box<dyn Report>>, Receiver<Box<dyn Report>>) =
             mpsc::channel();
         GlobalState {
-            sender,                                                 // sender for sending reports
+            sender: Some(sender),                                                 // sender for sending reports
             receiver: Arc::new(Mutex::new(receiver)), // receiver, wrapped in Arc and Mutex for thread safety
             typeid_to_writer: Arc::new(Mutex::new(HashMap::new())), // maps type IDs to CSV writers, arc because it needs to be shared across thread
             consumer_thread: None,                                  // handle for consumer thread
@@ -67,13 +67,14 @@ impl GlobalState {
     }
 
     pub fn join_consumer_thread(&mut self) {
+        self.sender = None;
         if let Some(handle) = self.consumer_thread.take() {
             handle.join().unwrap();
         }
     }
 
     pub fn get_sender(&self) -> Sender<Box<dyn Report>> {
-        self.sender.clone()
+        self.sender.as_ref().unwrap().clone()
     }
 
     pub fn get_receiver(&self) -> Arc<Mutex<Receiver<Box<dyn Report>>>> {
